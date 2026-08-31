@@ -43,6 +43,7 @@ export default function VeilPassApp() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [txHash, setTxHash] = useState("");
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
 
   useEffect(() => {
     const store: Store = createStore({ eip1193Adapters: [] });
@@ -63,6 +64,7 @@ export default function VeilPassApp() {
 
   useEffect(() => {
     if (!signed) return;
+    setAlreadyPaid(localStorage.getItem(`veilpass:paid:${signed.request.nonce}`) !== null);
     setSignatureValid(null);
     provider
       .verifyMessageInStarknet(requestTypedData(signed.request), signed.signature, signed.request.recipient)
@@ -70,7 +72,12 @@ export default function VeilPassApp() {
       .catch(() => setSignatureValid(false));
   }, [signed]);
 
-  const findings = useMemo(() => (signed ? analyzeRequest(signed.request) : []), [signed]);
+  const findings = useMemo(() => {
+    if (!signed) return [];
+    const result = analyzeRequest(signed.request);
+    if (alreadyPaid) result.unshift({ id: "replay", severity: "danger", title: "Already paid on this device", detail: "This request was previously submitted from this browser. Do not pay it twice." });
+    return result;
+  }, [signed, alreadyPaid]);
   const verdict = signed ? verdictFor(findings, signatureValid) : null;
 
   async function connect(selected: WalletWithStarknetFeatures) {
@@ -111,7 +118,7 @@ export default function VeilPassApp() {
       };
       const signature = signatureArray(await account.signMessage(requestTypedData(request, chainId)));
       const value = { request, signature };
-      const url = `${window.location.origin}/?request=${encodeSignedRequest(value)}`;
+      const url = `${window.location.origin}${window.location.pathname}?request=${encodeSignedRequest(value)}`;
       setSigned(value);
       setShareUrl(url);
       setSignatureValid(true);
@@ -139,6 +146,8 @@ export default function VeilPassApp() {
       }];
       const result = await account.strk20InvokeTransaction(actions);
       setTxHash(result.transaction_hash);
+      localStorage.setItem(`veilpass:paid:${signed.request.nonce}`, result.transaction_hash);
+      setAlreadyPaid(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The private transfer failed.");
     } finally {
@@ -189,7 +198,7 @@ export default function VeilPassApp() {
                 <div><span className={signatureValid ? "dot good" : signatureValid === false ? "dot bad" : "dot"} />{signatureValid === null ? "Verifying account signature" : signatureValid ? "Account signature verified" : "Signature invalid or unverifiable"}</div>
                 {findings.map((finding) => <div key={finding.id}><span className={`dot ${finding.severity}`} /> <span><b>{finding.title}</b><small>{finding.detail}</small></span></div>)}
               </div>
-              <button className="primary" onClick={payPrivately} disabled={Boolean(busy) || verdict === "nay" || signatureValid !== true}>{busy || (account ? "Pay privately" : "Connect to pay")}</button>
+              <button className="primary" onClick={payPrivately} disabled={Boolean(busy) || verdict === "nay" || signatureValid !== true || alreadyPaid}>{busy || (alreadyPaid ? "Payment already submitted" : account ? "Pay privately" : "Connect to pay")}</button>
               {txHash && <a className="receipt" href={`https://voyager.online/tx/${txHash}`} target="_blank" rel="noreferrer">Payment submitted · View receipt ↗</a>}
             </div>
           </div>

@@ -2,6 +2,8 @@
 
 Scam-resistant private payment requests on Starknet, powered by STRK20.
 
+**Live demo:** https://cryptnuel.github.io/veilpass/
+
 VeilPass lets a recipient sign an expiring payment request with their Starknet account. Before a payer moves money, VeilPass checks that the request was not modified, explains social-engineering warning signs, and routes approved payments through the STRK20 privacy pool.
 
 ## Why it exists
